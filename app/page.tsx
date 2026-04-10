@@ -48,6 +48,8 @@ export default function Home() {
   const [replyIsLoading, setReplyIsLoading] = useState(false);
   const [replyError, setReplyError] = useState("");
   const [isMilestoneLoading, setIsMilestoneLoading] = useState(false);
+  const [isAgentFormalitiesLoading, setIsAgentFormalitiesLoading] = useState(false);
+  const [isDraftLoading, setIsDraftLoading] = useState(false);
 
   useEffect(() => {
     setGlossary(loadGlossary());
@@ -169,6 +171,59 @@ export default function Home() {
       setReplyError(e instanceof Error ? e.message : "Translation failed. Please try again.");
     } finally {
       setReplyIsLoading(false);
+    }
+  }
+
+  async function handleAddFormalities() {
+    if (!sourceText.trim() && !translatedText.trim()) return;
+    setIsAgentFormalitiesLoading(true);
+    setReplyError("");
+    try {
+      const res = await fetch("/api/reply-formalities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inboundOriginal: sourceText,
+          inboundTranslated: translatedText,
+          replyBody: replySourceText,
+        }),
+      });
+      if (!res.ok) throw new Error("서문/마무리 생성에 실패했습니다.");
+      const data = await res.json();
+      setReplySourceText(data.result);
+    } catch (e) {
+      setReplyError(e instanceof Error ? e.message : "서문/마무리 생성에 실패했습니다.");
+    } finally {
+      setIsAgentFormalitiesLoading(false);
+    }
+  }
+
+  async function handleDraftReply() {
+    if (!sourceText.trim() && !translatedText.trim()) return;
+    setIsDraftLoading(true);
+    setReplyError("");
+    try {
+      const currentThread = activeThread
+        ? getThreads().find((t) => t.id === activeThread.id)
+        : null;
+      const res = await fetch("/api/draft-reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inboundOriginal: sourceText,
+          inboundTranslated: translatedText,
+          summary: currentThread?.summary ?? null,
+          companyName: activeCompany?.name ?? "",
+          threadTitle: activeThread?.title ?? "",
+        }),
+      });
+      if (!res.ok) throw new Error("답장 초안 생성에 실패했습니다.");
+      const data = await res.json();
+      setReplySourceText(data.draft);
+    } catch (e) {
+      setReplyError(e instanceof Error ? e.message : "답장 초안 생성에 실패했습니다.");
+    } finally {
+      setIsDraftLoading(false);
     }
   }
 
@@ -322,9 +377,29 @@ export default function Home() {
         {/* Reply Panel */}
         {replyOpen && (
           <div className="space-y-3">
-            <p className="text-[0.75rem] font-medium text-outline uppercase tracking-widest">
-              REPLY (OUTBOUND)
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-[0.75rem] font-medium text-outline uppercase tracking-widest">
+                REPLY (OUTBOUND)
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleAddFormalities}
+                  disabled={(!sourceText.trim() && !translatedText.trim()) || isAgentFormalitiesLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-outline-variant text-on-surface-variant font-medium rounded-lg hover:bg-surface-container-low active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-xs"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>auto_fix</span>
+                  {isAgentFormalitiesLoading ? "생성 중..." : "서문 & 마무리 추가"}
+                </button>
+                <button
+                  onClick={handleDraftReply}
+                  disabled={(!sourceText.trim() && !translatedText.trim()) || isDraftLoading}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-outline-variant text-on-surface-variant font-medium rounded-lg hover:bg-surface-container-low active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-xs"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>history_edu</span>
+                  {isDraftLoading ? "초안 작성 중..." : "히스토리 기반 초안 작성"}
+                </button>
+              </div>
+            </div>
             {replyError && (
               <div className="text-sm text-on-error-container bg-error-container border border-error/20 rounded-xl px-4 py-3 flex items-center gap-2">
                 <span className="material-symbols-outlined text-error" style={{ fontSize: "18px" }}>error</span>
