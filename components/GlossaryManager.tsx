@@ -1,29 +1,39 @@
 "use client";
 
 import { useState } from "react";
-import { GlossaryEntry, addEntry, removeEntry } from "@/lib/glossary";
+import { saveGlossaryItem, deleteGlossaryItem } from "@/lib/storage";
+import type { GlossaryItem } from "@/lib/types";
 
 interface Props {
-  entries: GlossaryEntry[];
-  onChange: (entries: GlossaryEntry[]) => void;
+  entries: GlossaryItem[];
+  onChange: (entries: GlossaryItem[]) => void;
 }
 
 export default function GlossaryManager({ entries, onChange }: Props) {
   const [source, setSource] = useState("");
   const [target, setTarget] = useState("");
   const [editing, setEditing] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
 
-  function handleAdd() {
+  async function handleAdd() {
     const s = source.trim();
     const t = target.trim();
     if (!s || !t) return;
-    onChange(addEntry(entries, { source: s, target: t }));
+    setIsAdding(true);
+    const newItem = await saveGlossaryItem({
+      id: crypto.randomUUID(),
+      source: s,
+      target: t,
+    });
+    onChange([...entries, newItem]);
     setSource("");
     setTarget("");
+    setIsAdding(false);
   }
 
-  function handleRemove(index: number) {
-    onChange(removeEntry(entries, index));
+  async function handleRemove(id: string) {
+    await deleteGlossaryItem(id);
+    onChange(entries.filter((e) => e.id !== id));
   }
 
   return (
@@ -67,10 +77,10 @@ export default function GlossaryManager({ entries, onChange }: Props) {
           />
           <button
             onClick={handleAdd}
-            disabled={!source.trim() || !target.trim()}
+            disabled={!source.trim() || !target.trim() || isAdding}
             className="px-4 py-2 text-sm bg-primary text-white font-semibold rounded-xl hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 transition-all"
           >
-            추가
+            {isAdding ? "추가 중..." : "추가"}
           </button>
         </div>
       )}
@@ -78,9 +88,9 @@ export default function GlossaryManager({ entries, onChange }: Props) {
       {/* Entry grid */}
       {entries.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {entries.map((entry, i) => (
+          {entries.map((entry) => (
             <div
-              key={i}
+              key={entry.id}
               className="flex items-center justify-between p-3 bg-surface-container-low rounded-xl hover:bg-surface-container transition-colors group"
             >
               <div className="space-y-0.5 min-w-0">
@@ -89,7 +99,7 @@ export default function GlossaryManager({ entries, onChange }: Props) {
               </div>
               {editing ? (
                 <button
-                  onClick={() => handleRemove(i)}
+                  onClick={() => handleRemove(entry.id)}
                   className="ml-3 p-1 text-outline hover:text-error transition-colors flex-shrink-0"
                   aria-label="삭제"
                 >

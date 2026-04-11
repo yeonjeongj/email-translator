@@ -6,11 +6,7 @@ import TranslatePanel from "@/components/TranslatePanel";
 import GlossaryManager from "@/components/GlossaryManager";
 import SaveModal from "@/components/SaveModal";
 import ChangeModal from "@/components/ChangeModal";
-import {
-  GlossaryEntry,
-  loadGlossary,
-  buildGlossaryPrompt,
-} from "@/lib/glossary";
+import { buildGlossaryPrompt } from "@/lib/glossary";
 import {
   translateEmail,
   TargetLanguage,
@@ -18,14 +14,16 @@ import {
 } from "@/lib/translate";
 import {
   getCompanies,
-  getThreads,
+  getThreadsByCompany,
+  getThread,
   getLastSave,
+  getGlossary,
   addMessageToThread,
   addMilestone,
   setLastSave,
   updateSummary,
 } from "@/lib/storage";
-import type { Company, Thread, Message, Milestone, Lang, Summary } from "@/lib/types";
+import type { Company, Thread, Message, Milestone, Lang, Summary, GlossaryItem } from "@/lib/types";
 
 const LANG_MAP: Record<TargetLanguage, Lang> = { KO: "ko", EN: "en", JA: "ja", ZH: "zh" };
 
@@ -33,7 +31,7 @@ export default function Home() {
   const [sourceText, setSourceText] = useState("");
   const [translatedText, setTranslatedText] = useState("");
   const [targetLang, setTargetLang] = useState<TargetLanguage>("KO");
-  const [glossary, setGlossary] = useState<GlossaryEntry[]>([]);
+  const [glossary, setGlossary] = useState<GlossaryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [saveModalOpen, setSaveModalOpen] = useState(false);
@@ -52,15 +50,24 @@ export default function Home() {
   const [isDraftLoading, setIsDraftLoading] = useState(false);
 
   useEffect(() => {
-    setGlossary(loadGlossary());
-    // Restore last selection
-    const last = getLastSave();
-    if (last) {
-      const company = getCompanies().find((c) => c.id === last.companyId) ?? null;
-      const thread = getThreads().find((t) => t.id === last.threadId) ?? null;
-      setActiveCompany(company);
-      setActiveThread(thread);
+    async function init() {
+      const [glossaryItems, last] = await Promise.all([
+        getGlossary(),
+        getLastSave(),
+      ]);
+      setGlossary(glossaryItems);
+      if (last) {
+        const companies = await getCompanies();
+        const company = companies.find((c) => c.id === last.companyId) ?? null;
+        if (company) {
+          const threads = await getThreadsByCompany(last.companyId);
+          const thread = threads.find((t) => t.id === last.threadId) ?? null;
+          setActiveCompany(company);
+          setActiveThread(thread);
+        }
+      }
     }
+    init();
   }, []);
 
   async function handleSaveClick() {
@@ -74,7 +81,7 @@ export default function Home() {
         lang: LANG_MAP[targetLang],
         createdAt: new Date().toISOString(),
       };
-      addMessageToThread(activeThread.id, message);
+      await addMessageToThread(activeThread.id, message);
 
       // Save outbound reply if present
       if (replySourceText.trim() && replyTranslatedText.trim()) {
@@ -86,14 +93,14 @@ export default function Home() {
           lang: LANG_MAP[replyTargetLang],
           createdAt: new Date().toISOString(),
         };
-        addMessageToThread(activeThread.id, replyMessage);
+        await addMessageToThread(activeThread.id, replyMessage);
       }
 
-      setLastSave(activeCompany.id, activeThread.id);
+      await setLastSave(activeCompany.id, activeThread.id);
       setIsSaved(true);
 
       // Get latest thread summary (activeThread may be stale)
-      const currentThread = getThreads().find((t) => t.id === activeThread.id);
+      const currentThread = await getThread(activeThread.id);
 
       // Generate summary in background
       try {
@@ -112,7 +119,7 @@ export default function Home() {
         });
         if (res.ok) {
           const data = await res.json();
-          updateSummary(activeThread.id, data.summary as Summary);
+          await updateSummary(activeThread.id, data.summary as Summary);
         } else {
           setIsSaved(false);
         }
@@ -149,7 +156,7 @@ export default function Home() {
           content: data.content,
           createdAt: new Date().toISOString(),
         };
-        addMilestone(activeThread.id, ms);
+        await addMilestone(activeThread.id, ms);
       }
     } catch (err) {
       console.error("Milestone generation failed:", err);
@@ -203,9 +210,7 @@ export default function Home() {
     setIsDraftLoading(true);
     setReplyError("");
     try {
-      const currentThread = activeThread
-        ? getThreads().find((t) => t.id === activeThread.id)
-        : null;
+      const currentThread = activeThread ? await getThread(activeThread.id) : null;
       const res = await fetch("/api/draft-reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

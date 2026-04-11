@@ -67,34 +67,38 @@ export default function SaveModal({
   const [isNewThread, setIsNewThread] = useState(false);
 
   const [step, setStep] = useState<Step>("company");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
-      const loaded = getCompanies();
-      setCompanies(loaded);
-      setSelectedCompanyId(loaded[0]?.id ?? "");
-      setIsNewCompany(loaded.length === 0);
-      setNewCompanyName("");
-      setNewCompanyLang("en");
-      setStep("company");
-      setSelectedThreadId("");
-      setNewThreadTitle("");
-      setIsNewThread(false);
+      const loadCompanies = async () => {
+        const loaded = await getCompanies();
+        setCompanies(loaded);
+        setSelectedCompanyId(loaded[0]?.id ?? "");
+        setIsNewCompany(loaded.length === 0);
+        setNewCompanyName("");
+        setNewCompanyLang("en");
+        setStep("company");
+        setSelectedThreadId("");
+        setNewThreadTitle("");
+        setIsNewThread(false);
+      }
+      loadCompanies();
     }
   }, [open]);
 
-  function handleCompanyNext() {
+  async function handleCompanyNext() {
     let company: Company;
 
     if (isNewCompany) {
       if (!newCompanyName.trim()) return;
-      company = {
+      const newCompany: Company = {
         id: crypto.randomUUID(),
         name: newCompanyName.trim(),
         defaultLang: newCompanyLang,
         createdAt: new Date().toISOString(),
       };
-      saveCompany(company);
+      company = await saveCompany(newCompany);
       setCompanies((prev) => [...prev, company]);
       setSelectedCompanyId(company.id);
     } else {
@@ -102,7 +106,7 @@ export default function SaveModal({
       company = companies.find((c) => c.id === selectedCompanyId)!;
     }
 
-    const companyThreads = getThreadsByCompany(company.id);
+    const companyThreads = await getThreadsByCompany(company.id);
     setThreads(companyThreads);
     setSelectedThreadId(companyThreads[0]?.id ?? "");
     setIsNewThread(companyThreads.length === 0);
@@ -110,10 +114,10 @@ export default function SaveModal({
   }
 
   async function handleSave() {
-    const companyId = isNewCompany
-      ? companies[companies.length - 1]?.id
-      : selectedCompanyId;
+    const companyId = selectedCompanyId;
     if (!companyId) return;
+
+    setIsSubmitting(true);
 
     const message: Message = {
       id: crypto.randomUUID(),
@@ -140,27 +144,36 @@ export default function SaveModal({
         : null;
 
     if (isNewThread) {
-      if (!newThreadTitle.trim()) return;
-      savedThread = {
+      if (!newThreadTitle.trim()) {
+        setIsSubmitting(false);
+        return;
+      }
+      const newThread: Thread = {
         id: crypto.randomUUID(),
         companyId,
         title: newThreadTitle.trim(),
-        messages: outboundMessage ? [message, outboundMessage] : [message],
+        messages: [],
         milestones: [],
         summary: null,
         createdAt: new Date().toISOString(),
       };
-      saveThread(savedThread);
+      savedThread = await saveThread(newThread);
+      await addMessageToThread(savedThread.id, message);
+      if (outboundMessage) await addMessageToThread(savedThread.id, outboundMessage);
     } else {
-      if (!selectedThreadId) return;
-      addMessageToThread(selectedThreadId, message);
-      if (outboundMessage) addMessageToThread(selectedThreadId, outboundMessage);
+      if (!selectedThreadId) {
+        setIsSubmitting(false);
+        return;
+      }
+      await addMessageToThread(selectedThreadId, message);
+      if (outboundMessage) await addMessageToThread(selectedThreadId, outboundMessage);
       savedThread = threads.find((t) => t.id === selectedThreadId)!;
     }
 
-    setLastSave(companyId, savedThread.id);
+    await setLastSave(companyId, savedThread.id);
     onSaved(finalCompany, savedThread);
     onClose();
+    setIsSubmitting(false);
 
     // Generate summary in background only when there is translated content
     if (!sourceText.trim() || !translatedText.trim()) return;
@@ -181,7 +194,7 @@ export default function SaveModal({
       });
       if (res.ok) {
         const data = await res.json();
-        updateSummary(savedThread.id, data.summary as Summary);
+        await updateSummary(savedThread.id, data.summary as Summary);
       } else {
         onSummaryError?.();
       }
@@ -377,11 +390,12 @@ export default function SaveModal({
                 <button
                   onClick={handleSave}
                   disabled={
-                    isNewThread ? !newThreadTitle.trim() : !selectedThreadId
+                    isSubmitting ||
+                    (isNewThread ? !newThreadTitle.trim() : !selectedThreadId)
                   }
                   className="flex-1 py-2.5 bg-primary text-white font-semibold rounded-xl hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm"
                 >
-                  저장
+                  {isSubmitting ? "저장 중..." : "저장"}
                 </button>
               </div>
             </>

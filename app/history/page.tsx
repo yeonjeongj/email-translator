@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   getCompanies,
   getThreadsByCompany,
+  getThreadCounts,
   addMilestone,
 } from "@/lib/storage";
 import type { Company, Thread, Message, Milestone } from "@/lib/types";
@@ -42,47 +43,58 @@ function timeAgo(iso: string) {
 export default function HistoryPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [threads, setThreads] = useState<Thread[]>([]);
+  const [threadCounts, setThreadCounts] = useState<Record<string, number>>({});
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
   const [selectedThreadId, setSelectedThreadId] = useState<string>("");
   const [search, setSearch] = useState("");
   const [milestoneForm, setMilestoneForm] = useState<{ title: string; content: string } | null>(null);
+  const [isSubmittingMilestone, setIsSubmittingMilestone] = useState(false);
 
   useEffect(() => {
-    const loaded = getCompanies();
-    setCompanies(loaded);
-    if (loaded.length > 0) {
-      const firstId = loaded[0].id;
-      setSelectedCompanyId(firstId);
-      const companyThreads = getThreadsByCompany(firstId);
-      setThreads(companyThreads);
-      if (companyThreads.length > 0) {
-        setSelectedThreadId(companyThreads[0].id);
+    async function init() {
+      const [loaded, counts] = await Promise.all([
+        getCompanies(),
+        getThreadCounts(),
+      ]);
+      setCompanies(loaded);
+      setThreadCounts(counts);
+      if (loaded.length > 0) {
+        const firstId = loaded[0].id;
+        setSelectedCompanyId(firstId);
+        const companyThreads = await getThreadsByCompany(firstId);
+        setThreads(companyThreads);
+        if (companyThreads.length > 0) {
+          setSelectedThreadId(companyThreads[0].id);
+        }
       }
     }
+    init();
   }, []);
 
-  function handleSelectCompany(companyId: string) {
+  async function handleSelectCompany(companyId: string) {
     setSelectedCompanyId(companyId);
-    const companyThreads = getThreadsByCompany(companyId);
+    const companyThreads = await getThreadsByCompany(companyId);
     setThreads(companyThreads);
     setSelectedThreadId(companyThreads[0]?.id ?? "");
     setSearch("");
     setMilestoneForm(null);
   }
 
-  function handleSubmitMilestone() {
+  async function handleSubmitMilestone() {
     if (!milestoneForm || !selectedThreadId) return;
     if (!milestoneForm.title.trim() || !milestoneForm.content.trim()) return;
+    setIsSubmittingMilestone(true);
     const milestone: Milestone = {
       id: crypto.randomUUID(),
       title: milestoneForm.title.trim(),
       content: milestoneForm.content.trim(),
       createdAt: new Date().toISOString(),
     };
-    addMilestone(selectedThreadId, milestone);
-    const updated = getThreadsByCompany(selectedCompanyId);
+    await addMilestone(selectedThreadId, milestone);
+    const updated = await getThreadsByCompany(selectedCompanyId);
     setThreads(updated);
     setMilestoneForm(null);
+    setIsSubmittingMilestone(false);
   }
 
   const filteredThreads = threads.filter(
@@ -150,7 +162,7 @@ export default function HistoryPage() {
             <div className="space-y-1">
               {companies.map((company) => {
                 const isActive = selectedCompanyId === company.id;
-                const threadCount = getThreadsByCompany(company.id).length;
+                const threadCount = threadCounts[company.id] ?? 0;
                 return (
                   <button
                     key={company.id}
@@ -379,9 +391,10 @@ export default function HistoryPage() {
                         </button>
                         <button
                           onClick={handleSubmitMilestone}
-                          className="text-xs font-semibold text-white bg-primary hover:brightness-110 px-4 py-1.5 rounded-lg transition-all"
+                          disabled={isSubmittingMilestone}
+                          className="text-xs font-semibold text-white bg-primary hover:brightness-110 px-4 py-1.5 rounded-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          저장
+                          {isSubmittingMilestone ? "저장 중..." : "저장"}
                         </button>
                       </div>
                     </div>
