@@ -41,35 +41,39 @@ export default function ChangeModal({ open, onClose, onChanged, currentCompanyId
   const [isNewThread, setIsNewThread] = useState(false);
 
   const [step, setStep] = useState<Step>("company");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
-      const loaded = getCompanies();
-      setCompanies(loaded);
-      const preselectedCompanyId = currentCompanyId ?? loaded[0]?.id ?? "";
-      setSelectedCompanyId(preselectedCompanyId);
-      setIsNewCompany(loaded.length === 0);
-      setNewCompanyName("");
-      setNewCompanyLang("en");
-      setStep("company");
-      setSelectedThreadId(currentThreadId ?? "");
-      setNewThreadTitle("");
-      setIsNewThread(false);
+      const loadCompanies = async () => {
+        const loaded = await getCompanies();
+        setCompanies(loaded);
+        const preselectedCompanyId = currentCompanyId ?? loaded[0]?.id ?? "";
+        setSelectedCompanyId(preselectedCompanyId);
+        setIsNewCompany(loaded.length === 0);
+        setNewCompanyName("");
+        setNewCompanyLang("en");
+        setStep("company");
+        setSelectedThreadId(currentThreadId ?? "");
+        setNewThreadTitle("");
+        setIsNewThread(false);
+      }
+      loadCompanies();
     }
   }, [open]);
 
-  function handleCompanyNext() {
+  async function handleCompanyNext() {
     let company: Company;
 
     if (isNewCompany) {
       if (!newCompanyName.trim()) return;
-      company = {
+      const newCompany: Company = {
         id: crypto.randomUUID(),
         name: newCompanyName.trim(),
         defaultLang: newCompanyLang,
         createdAt: new Date().toISOString(),
       };
-      saveCompany(company);
+      company = await saveCompany(newCompany);
       setCompanies((prev) => [...prev, company]);
       setSelectedCompanyId(company.id);
     } else {
@@ -77,7 +81,7 @@ export default function ChangeModal({ open, onClose, onChanged, currentCompanyId
       company = companies.find((c) => c.id === selectedCompanyId)!;
     }
 
-    const companyThreads = getThreadsByCompany(company.id);
+    const companyThreads = await getThreadsByCompany(company.id);
     setThreads(companyThreads);
     const preselectedThreadId =
       company.id === currentCompanyId && currentThreadId
@@ -88,18 +92,21 @@ export default function ChangeModal({ open, onClose, onChanged, currentCompanyId
     setStep("thread");
   }
 
-  function handleSave() {
-    const companyId = isNewCompany
-      ? companies[companies.length - 1]?.id
-      : selectedCompanyId;
+  async function handleSave() {
+    const companyId = selectedCompanyId;
     if (!companyId) return;
+
+    setIsSubmitting(true);
 
     const finalCompany = companies.find((c) => c.id === companyId)!;
     let savedThread: Thread;
 
     if (isNewThread) {
-      if (!newThreadTitle.trim()) return;
-      savedThread = {
+      if (!newThreadTitle.trim()) {
+        setIsSubmitting(false);
+        return;
+      }
+      const newThread: Thread = {
         id: crypto.randomUUID(),
         companyId,
         title: newThreadTitle.trim(),
@@ -108,15 +115,19 @@ export default function ChangeModal({ open, onClose, onChanged, currentCompanyId
         summary: null,
         createdAt: new Date().toISOString(),
       };
-      saveThread(savedThread);
+      savedThread = await saveThread(newThread);
     } else {
-      if (!selectedThreadId) return;
+      if (!selectedThreadId) {
+        setIsSubmitting(false);
+        return;
+      }
       savedThread = threads.find((t) => t.id === selectedThreadId)!;
     }
 
-    setLastSave(companyId, savedThread.id);
+    await setLastSave(companyId, savedThread.id);
     onChanged(finalCompany, savedThread);
     onClose();
+    setIsSubmitting(false);
   }
 
   if (!open) return null;
@@ -307,11 +318,12 @@ export default function ChangeModal({ open, onClose, onChanged, currentCompanyId
                 <button
                   onClick={handleSave}
                   disabled={
-                    isNewThread ? !newThreadTitle.trim() : !selectedThreadId
+                    isSubmitting ||
+                    (isNewThread ? !newThreadTitle.trim() : !selectedThreadId)
                   }
                   className="flex-1 py-2.5 bg-primary text-white font-semibold rounded-xl hover:brightness-110 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all text-sm"
                 >
-                  변경
+                  {isSubmitting ? "변경 중..." : "변경"}
                 </button>
               </div>
             </>
