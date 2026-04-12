@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT = `You are a professional assistant specializing in communication between Korean media production teams and overseas studios.
+const SYSTEM_PROMPT = `You are a professional assistant specializing in communication between Korean IP product planning and production teams and overseas studios.
 
 Your task is to create a milestone entry that captures the key outcome or decision from the provided email exchange.
 

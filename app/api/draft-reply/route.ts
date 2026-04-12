@@ -4,7 +4,7 @@ import type { Summary } from "@/lib/types";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT = `You are an expert Korean business email writer for media production teams working with overseas studios.
+const SYSTEM_PROMPT = `You are an expert Korean business email writer for IP product planning and production teams working with overseas studios.
 
 Your task: draft a complete Korean reply to an inbound email, informed by the project's conversation history summary.
 
