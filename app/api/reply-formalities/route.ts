@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT = `You are an expert in formal Korean business email writing for media production teams communicating with overseas studios.
+const SYSTEM_PROMPT = `You are an expert in formal Korean business email writing for IP product planning and production teams communicating with overseas studios.
 
 Your task: given an inbound email and an optional reply body written by the user, return the full reply text with a polite 서문 (opening) and 마무리 (closing) added.
 

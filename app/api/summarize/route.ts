@@ -4,7 +4,7 @@ import type { Summary } from "@/lib/types";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const SYSTEM_PROMPT = `You are a professional assistant specializing in communication between Korean media production teams and overseas studios.
+const SYSTEM_PROMPT = `You are a professional assistant specializing in communication between Korean IP product planning and production teams and overseas studios.
 
 Your task is to update an existing project summary by incorporating one new email message.
 
